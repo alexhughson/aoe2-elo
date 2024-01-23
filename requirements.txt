@@ -1,2 +1,3 @@
 mgz
 ipython
+trueskill
