@@ -1,3 +1,5 @@
 mgz
 ipython
 trueskill
+pyyaml
+orjson
