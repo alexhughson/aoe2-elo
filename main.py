@@ -18,6 +18,8 @@ relevant_players = yaml.load(open('config.yaml'), Loader=yaml.FullLoader).get('h
 humans = relevant_players
 relevant_players.append('HardComputer')
 
+processed_games = set()
+
 testfile = "MP Replay v101.102.33868.0 @2024.01.18 222811 (4).aoe2record"
 
 rank_dict = defaultdict(lambda: Rating())
@@ -33,6 +35,8 @@ class GameRow:
 
 output_rows = []
 
+def game_identifier(game):
+    return f"{game['date']} {game['map_seed']}"
 
 def parse_game_date(filename):
     date = filename.split(' ')[-3]
@@ -60,7 +64,7 @@ def generate_output_row(filename, winners, losers, included=True):
         winners=winners,
         losers=losers,
         included=included,
-        playerratings=[get_rank(player) for player in relevant_players],
+        playerratings={player:get_rank(player) for player in relevant_players},
     )
     return row
 
@@ -106,6 +110,8 @@ def process_games():
             try:
                 sum = FullSummary(f)
             except:
+                with open("data/processed-data/" + filename.replace('.aoe2record', '.json'), 'w') as outfile:
+                    outfile.write('{"error": "error parsing"}')
                 print(f"Error parsing {filename}")
                 continue
            
@@ -140,14 +146,23 @@ def process_games():
             
                 
 def process_scores():
+
     for filename in ordered_game_outputs():
         print(filename)
         with open('data/processed-data/' + filename, 'r') as f:
             try:
-                game = json.load(f)
+                filedata = f.read()
+                game = json.loads(filedata)
             except:
                 print(f"Error parsing {filename}")
                 continue
+            if game.get('error'):
+                continue
+
+            if game_identifier(game) in processed_games:
+                print(f"Skipping {filename} because it's already processed")
+                continue
+            processed_games.add(game_identifier(game))
             if len(game['winners']) != len(game['losers']):
                 unclear_matches.append(filename)
                 output_rows.append(generate_output_row(filename, game['winners'], game['losers'], included=False))
@@ -187,4 +202,4 @@ if __name__ == "__main__":
             ] + [row.playerratings[player] for player in relevant_players]
             out_csv.write(','.join([str(x) for x in output_row]) + '\n')
         
-    print(f"{len(resolved_matches)} matches resolved, {len(unclear_matches)} unclear")
+

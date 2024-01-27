@@ -161,5 +161,6 @@ cython_debug/
 
 data/save-data/*
 data/processed-data/*
+progress.csv
 
 config.yaml
