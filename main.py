@@ -3,12 +3,15 @@ import orjson as json
 import yaml
 from collections import defaultdict
 from dataclasses import dataclass
+import itertools
 from datetime import datetime
 from typing import List, Dict
+import math
 
 from mgz.model import parse_match, serialize
 from mgz.summary import Summary, FullSummary
-from trueskill import Rating, rate
+from trueskill import Rating, rate, quality, BETA
+import trueskill
 
 from IPython import embed
 
@@ -16,7 +19,6 @@ resolved_matches = []
 unclear_matches = []
 relevant_players = yaml.load(open('config.yaml'), Loader=yaml.FullLoader).get('humans', [])
 humans = relevant_players
-relevant_players.append('HardComputer')
 
 processed_games = set()
 
@@ -86,9 +88,9 @@ def ordered_game_outputs():
     relevant_dates = set()
 
     for filename in os.listdir('data/processed-data'):
-            filedate = parse_game_date(filename)
-            files_dict[filedate].append(filename)
-            relevant_dates.add(filedate)
+        filedate = parse_game_date(filename)
+        files_dict[filedate].append(filename)
+        relevant_dates.add(filedate)
 
     out_arr = []
     for date in sorted(relevant_dates):
@@ -143,7 +145,15 @@ def process_games():
                 output_bytes = json.dumps(processed_result, option=json.OPT_INDENT_2)
                 outfile.write(output_bytes.decode('utf-8'))
 
-            
+def win_probability(team1, team2):
+    team1 = [rank_dict[player] for player in team1]
+    team2 = [rank_dict[player] for player in team2]
+    delta_mu = sum(r.mu for r in team1) - sum(r.mu for r in team2)
+    sum_sigma = sum(r.sigma ** 2 for r in itertools.chain(team1, team2))
+    size = len(team1) + len(team2)
+    denom = math.sqrt(size * (BETA * BETA) + sum_sigma)
+    ts = trueskill.global_env()
+    return ts.cdf(delta_mu / denom)
                 
 def process_scores():
 
@@ -181,6 +191,12 @@ def update_rankings(winning_team, losing_team):
     for i, player in enumerate(losing_team):
         rank_dict[player] = new_losing[i]
 
+def match_quality(team1, team2):
+    team1_rankings = [rank_dict[player] for player in team1]
+    team2_rankings = [rank_dict[player] for player in team2]
+    winrate = quality([team1_rankings, team2_rankings])
+    return winrate
+
 if __name__ == "__main__":
     process_games()
     process_scores()
@@ -202,4 +218,11 @@ if __name__ == "__main__":
             ] + [row.playerratings[player] for player in relevant_players]
             out_csv.write(','.join([str(x) for x in output_row]) + '\n')
         
+    with open("matchups.csv", "w") as matchups_csv:
+        matchups_csv.write("team1,team2,match_quality,team1_win_probability\n")
+        for team1 in itertools.combinations(humans, 2):
+            for team2 in itertools.combinations([h for h in humans if h not in team1], 2):
+                match_q = match_quality(team1, team2)
+                win_odds = win_probability(team1, team2)
+                matchups_csv.write(f"{':'.join(team1)},{':'.join(team2)},{match_q},{win_odds}\n")
 
