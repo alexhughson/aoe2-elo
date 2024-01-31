@@ -1,6 +1,6 @@
 run:
-	pip install -r requirements.txt
-	/opt/conda/bin/python main.py
+	python -m pip install -r requirements.txt
+	python main.py
 	
 ipython:
-	/opt/conda/bin/ipython
+	python -m ipython
